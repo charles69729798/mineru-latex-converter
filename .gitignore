@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+venv/
+mineru_env/
+ENV/
+.venv
+
+# 출력 디렉토리
+word_output_*/
+output*/
+test_output/
+nougat_enhanced_*/
+
+# 캐시
+.cache/
+mineru_cache/
+.mineru/
+
+# 모델 파일
+*.pth
+*.pt
+*.pkl
+*.onnx
+yolov8n.pt
+
+# 로그
+*.log
+*.txt.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 테스트 파일
+test_*.html
+simple_test.html
+working_test.html
+real_working_viewer.html
+
+# 임시 파일
+*.tmp
+*.temp
+temp/
+tmp/

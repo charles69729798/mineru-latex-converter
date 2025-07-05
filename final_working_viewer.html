@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3등분 위치정보 기반 뷰어 - PDF | LaTeX 코드 | 수식 렌더링</title>
+    
+    <!-- MathJax 설정 먼저 -->
+    <script>
+        window.MathJax = {
+            tex: { 
+                inlineMath: [['$', '$'], ['\\(', '\\)']], 
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                packages: {'[+]': ['ams', 'base']}
+            },
+            svg: { fontCache: 'global' },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                    console.log('✅ MathJax 로드 완료');
+                }
+            }
+        };
+    </script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f5f5f5;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        /* 메인 컨테이너 - 세로 배치 */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        /* 컨트롤 패널 */
+        .control-panel {
+            background: #2c3e50;
+            color: white;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+            flex-shrink: 0;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover { background: #2980b9; }
+        .btn:disabled { background: #7f8c8d; cursor: not-allowed; }
+        
+        /* 3등분 패널 컨테이너 - 가로 배치 */
+        .panels-container {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            height: calc(100vh - 60px);
+        }
+        
+        /* 개별 패널 스타일 - 가로 33.333% 너비 */
+        .panel {
+            flex: 1;
+            border-right: 2px solid #34495e;
+            display: flex;
+            flex-direction: column;
+            width: 33.333%;
+        }
+        
+        .panel:last-child { border-right: none; }
+        
+        .panel-header {
+            background: #34495e;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+        
+        /* 패널별 줌 컨트롤 */
+        .zoom-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .zoom-btn {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+        }
+        
+        .zoom-btn:hover { background: #1a252f; }
+        
+        .zoom-level {
+            font-size: 11px;
+            color: #bdc3c7;
+            min-width: 35px;
+            text-align: center;
+        }
+        
+        /* 패널 콘텐츠 영역 */
+        .panel-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: white;
+        }
+        
+        .panel-viewport {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            position: relative;
+        }
+        
+        .panel-inner {
+            transform-origin: top left;
+            transition: transform 0.2s ease;
+            cursor: grab;
+            min-height: 100%;
+            padding: 20px;
+        }
+        
+        .panel-inner:active {
+            cursor: grabbing;
+        }
+        
+        /* PDF 패널 전용 스타일 */
+        #pdf-panel .panel-inner {
+            background: #f8f9fa;
+            padding: 10px;
+        }
+        
+        .pdf-page {
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .pdf-page img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .pdf-page-number {
+            background: #34495e;
+            color: white;
+            padding: 8px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        /* LaTeX 코드 패널 스타일 */
+        #latex-panel .panel-inner {
+            background: white;
+            line-height: 1.6;
+        }
+        
+        .page-section {
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .page-section-header {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: -20px -20px 20px -20px;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .latex-code {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: #495057;
+            white-space: pre-wrap;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+            margin: 10px 0;
+        }
+        
+        /* 렌더링 패널 스타일 */
+        #render-panel .panel-inner {
+            background: white;
+            line-height: 1.8;
+        }
+        
+        .rendered-content {
+            padding: 15px;
+        }
+        
+        .rendered-formula {
+            margin: 15px 0;
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fb;
+            border: 1px solid #d1ecf1;
+            border-radius: 5px;
+        }
+        
+        .rendered-text {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        /* 페이지 네비게이션 */
+        .page-nav {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2c3e50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .page-nav button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 0 5px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .page-nav button:hover {
+            background: #2980b9;
+        }
+        
+        .page-nav button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+        }
+        
+        /* 스크롤바 스타일링 */
+        .panel-viewport::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        .panel-viewport::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .panel-viewport::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        .panel-viewport::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- 상단 컨트롤 패널 -->
+        <div class="control-panel">
+            <div class="control-group">
+                <h1 style="font-size: 18px; margin: 0;">🔬 LaTeX to Word 3패널 뷰어</h1>
+                <span style="font-size: 14px; color: #bdc3c7;">페이지: <span id="current-page">1</span> / <span id="total-pages">6</span></span>
+            </div>
+            <div class="control-group">
+                <button class="btn" onclick="resetAllZoom()">🔄 전체 리셋</button>
+                <button class="btn" onclick="toggleSync()">🔗 동기화: <span id="sync-status">OFF</span></button>
+                <button class="btn" onclick="exportData()">📥 내보내기</button>
+            </div>
+        </div>
+        
+        <!-- 3등분 패널 컨테이너 -->
+        <div class="panels-container">
+            <!-- 패널 1: PDF 원본 (한글 제거 전) -->
+            <div class="panel" id="pdf-panel">
+                <div class="panel-header">
+                    <span>📄 PDF 원본 (한글 포함)</span>
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" onclick="zoomPanel('pdf-panel', -0.1)">-</button>
+                        <span class="zoom-level" id="pdf-zoom">100%</span>
+                        <button class="zoom-btn" onclick="zoomPanel('pdf-panel', 0.1)">+</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-viewport" id="pdf-viewport">
+                        <div class="panel-inner" id="pdf-inner">
+                            <!-- 페이지별 PDF 이미지 -->
+                            <div class="pdf-page" data-page="1">
+                                <div class="pdf-page-number">페이지 1</div>
+                                <img src="pdf_images/page_1.png" alt="페이지 1">
+                            </div>
+                            <div class="pdf-page" data-page="2">
+                                <div class="pdf-page-number">페이지 2</div>
+                                <img src="pdf_images/page_2.png" alt="페이지 2">
+                            </div>
+                            <div class="pdf-page" data-page="3">
+                                <div class="pdf-page-number">페이지 3</div>
+                                <img src="pdf_images/page_3.png" alt="페이지 3">
+                            </div>
+                            <div class="pdf-page" data-page="4">
+                                <div class="pdf-page-number">페이지 4</div>
+                                <img src="pdf_images/page_4.png" alt="페이지 4">
+                            </div>
+                            <div class="pdf-page" data-page="5">
+                                <div class="pdf-page-number">페이지 5</div>
+                                <img src="pdf_images/page_5.png" alt="페이지 5">
+                            </div>
+                            <div class="pdf-page" data-page="6">
+                                <div class="pdf-page-number">페이지 6</div>
+                                <img src="pdf_images/page_6.png" alt="페이지 6">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 패널 2: LaTeX 코드 (보험수학식 제거) -->
+            <div class="panel" id="latex-panel">
+                <div class="panel-header">
+                    <span>📝 LaTeX 코드</span>
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" onclick="zoomPanel('latex-panel', -0.1)">-</button>
+                        <span class="zoom-level" id="latex-zoom">100%</span>
+                        <button class="zoom-btn" onclick="zoomPanel('latex-panel', 0.1)">+</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-viewport" id="latex-viewport">
+                        <div class="panel-inner" id="latex-inner">
+                            <!-- 페이지별 LaTeX 코드 -->
+                            <div class="page-section" data-page="1">
+                                <div class="page-section-header">페이지 1</div>
+                                <div class="latex-code">% 보험료 및 책임준비금 산출방법서</div>
+                                <div class="latex-code">% 1. 보험료의 계산에 관한 사항</div>
+                            </div>
+                            
+                            <div class="page-section" data-page="2">
+                                <div class="page-section-header">페이지 2</div>
+                                <div class="latex-code">\\sum_{i=1}^{n} \\frac{1}{(1+r)^i}</div>
+                                <div class="latex-code">P = \\frac{L}{1+i}</div>
+                            </div>
+                            
+                            <div class="page-section" data-page="3">
+                                <div class="page-section-header">페이지 3</div>
+                                <div class="latex-code">\\mathbb{E}[X] = \\int_{-\\infty}^{\\infty} x f(x) dx</div>
+                            </div>
+                            
+                            <div class="page-section" data-page="4">
+                                <div class="page-section-header">페이지 4</div>
+                                <div class="latex-code">V_t = \\sum_{k=1}^{n} v^k \\cdot P_k</div>
+                            </div>
+                            
+                            <div class="page-section" data-page="5">
+                                <div class="page-section-header">페이지 5</div>
+                                <div class="latex-code">q_x = \\frac{d_x}{l_x}</div>
+                                <div class="latex-code">p_x = 1 - q_x</div>
+                            </div>
+                            
+                            <div class="page-section" data-page="6">
+                                <div class="page-section-header">페이지 6</div>
+                                <div class="latex-code">A_x = \\sum_{k=0}^{\\omega-x} v^{k+1} \\cdot {}_k p_x \\cdot q_{x+k}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 패널 3: 수식 렌더링 (보험수학식 제거 및 LaTeX 렌더링) -->
+            <div class="panel" id="render-panel">
+                <div class="panel-header">
+                    <span>🎯 수식 렌더링</span>
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" onclick="zoomPanel('render-panel', -0.1)">-</button>
+                        <span class="zoom-level" id="render-zoom">100%</span>
+                        <button class="zoom-btn" onclick="zoomPanel('render-panel', 0.1)">+</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-viewport" id="render-viewport">
+                        <div class="panel-inner" id="render-inner">
+                            <!-- 페이지별 렌더링된 내용 -->
+                            <div class="page-section" data-page="1">
+                                <div class="page-section-header">페이지 1</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-text">보험료 및 책임준비금 산출방법서</div>
+                                    <div class="rendered-text">1. 보험료의 계산에 관한 사항</div>
+                                </div>
+                            </div>
+                            
+                            <div class="page-section" data-page="2">
+                                <div class="page-section-header">페이지 2</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-formula">
+                                        $$\sum_{i=1}^{n} \frac{1}{(1+r)^i}$$
+                                    </div>
+                                    <div class="rendered-formula">
+                                        $$P = \frac{L}{1+i}$$
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="page-section" data-page="3">
+                                <div class="page-section-header">페이지 3</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-formula">
+                                        $$\mathbb{E}[X] = \int_{-\infty}^{\infty} x f(x) dx$$
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="page-section" data-page="4">
+                                <div class="page-section-header">페이지 4</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-formula">
+                                        $$V_t = \sum_{k=1}^{n} v^k \cdot P_k$$
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="page-section" data-page="5">
+                                <div class="page-section-header">페이지 5</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-formula">
+                                        $$q_x = \frac{d_x}{l_x}$$
+                                    </div>
+                                    <div class="rendered-formula">
+                                        $$p_x = 1 - q_x$$
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="page-section" data-page="6">
+                                <div class="page-section-header">페이지 6</div>
+                                <div class="rendered-content">
+                                    <div class="rendered-formula">
+                                        $$A_x = \sum_{k=0}^{\omega-x} v^{k+1} \cdot {}_k p_x \cdot q_{x+k}$$
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 페이지 네비게이션 -->
+        <div class="page-nav">
+            <button onclick="previousPage()" id="prev-btn">◀ 이전</button>
+            <span id="page-info">1 / 6</span>
+            <button onclick="nextPage()" id="next-btn">다음 ▶</button>
+        </div>
+    </div>
+    
+    <script>
+        // 전역 변수
+        const zoomLevels = {
+            'pdf-panel': 1.0,
+            'latex-panel': 1.0,
+            'render-panel': 1.0
+        };
+        let syncScroll = false;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let panelStartScrollX = 0;
+        let panelStartScrollY = 0;
+        let currentPanel = null;
+        let currentPage = 1;
+        const totalPages = 6;
+        
+        // 줌 기능
+        function zoomPanel(panelId, delta) {
+            console.log('✅ 줌 기능 작동:', panelId, delta);
+            const newLevel = Math.max(0.25, Math.min(2.0, zoomLevels[panelId] + delta));
+            zoomLevels[panelId] = newLevel;
+            
+            const inner = document.getElementById(panelId.replace('-panel', '-inner'));
+            if (inner) {
+                inner.style.transform = `scale(${newLevel})`;
+                console.log('✅ 줌 적용 완료:', newLevel);
+            }
+            
+            const zoomDisplay = document.getElementById(panelId.replace('-panel', '-zoom'));
+            if (zoomDisplay) {
+                zoomDisplay.textContent = Math.round(newLevel * 100) + '%';
+            }
+        }
+        
+        // 전체 리셋
+        function resetAllZoom() {
+            console.log('✅ 전체 리셋 작동');
+            ['pdf-panel', 'latex-panel', 'render-panel'].forEach(panelId => {
+                zoomLevels[panelId] = 1.0;
+                const inner = document.getElementById(panelId.replace('-panel', '-inner'));
+                if (inner) {
+                    inner.style.transform = 'scale(1.0)';
+                }
+                
+                const zoomDisplay = document.getElementById(panelId.replace('-panel', '-zoom'));
+                if (zoomDisplay) {
+                    zoomDisplay.textContent = '100%';
+                }
+                
+                const viewport = document.getElementById(panelId.replace('-panel', '-viewport'));
+                if (viewport) {
+                    viewport.scrollTop = 0;
+                    viewport.scrollLeft = 0;
+                }
+            });
+            console.log('✅ 전체 리셋 완료');
+        }
+        
+        // 동기화 토글
+        function toggleSync() {
+            syncScroll = !syncScroll;
+            document.getElementById('sync-status').textContent = syncScroll ? 'ON' : 'OFF';
+            console.log('✅ 동기화 상태 변경:', syncScroll ? 'ON' : 'OFF');
+            
+            if (syncScroll) {
+                setupSyncScroll();
+            } else {
+                removeSyncScroll();
+            }
+        }
+        
+        // 스크롤 동기화 설정
+        function setupSyncScroll() {
+            const viewports = document.querySelectorAll('.panel-viewport');
+            viewports.forEach(viewport => {
+                viewport.addEventListener('scroll', syncScrollHandler);
+            });
+        }
+        
+        // 스크롤 동기화 제거
+        function removeSyncScroll() {
+            const viewports = document.querySelectorAll('.panel-viewport');
+            viewports.forEach(viewport => {
+                viewport.removeEventListener('scroll', syncScrollHandler);
+            });
+        }
+        
+        // 스크롤 동기화 핸들러
+        function syncScrollHandler(e) {
+            if (!syncScroll) return;
+            
+            const sourceViewport = e.target;
+            const scrollPercentX = sourceViewport.scrollLeft / (sourceViewport.scrollWidth - sourceViewport.clientWidth);
+            const scrollPercentY = sourceViewport.scrollTop / (sourceViewport.scrollHeight - sourceViewport.clientHeight);
+            
+            const viewports = document.querySelectorAll('.panel-viewport');
+            viewports.forEach(viewport => {
+                if (viewport !== sourceViewport) {
+                    viewport.scrollLeft = scrollPercentX * (viewport.scrollWidth - viewport.clientWidth);
+                    viewport.scrollTop = scrollPercentY * (viewport.scrollHeight - viewport.clientHeight);
+                }
+            });
+        }
+        
+        // 내보내기
+        function exportData() {
+            console.log('✅ 내보내기 기능 작동');
+            const data = {
+                currentPage: currentPage,
+                zoomLevels: zoomLevels,
+                syncScroll: syncScroll,
+                timestamp: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `viewer_data_${new Date().getTime()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log('✅ 내보내기 완료');
+        }
+        
+        // 페이지 이동
+        function goToPage(pageNum) {
+            if (pageNum < 1 || pageNum > totalPages) return;
+            
+            currentPage = pageNum;
+            console.log('✅ 페이지 이동:', currentPage);
+            
+            // 페이지 정보 업데이트
+            document.getElementById('current-page').textContent = currentPage;
+            document.getElementById('page-info').textContent = `${currentPage} / ${totalPages}`;
+            
+            // 버튼 상태 업데이트
+            document.getElementById('prev-btn').disabled = currentPage === 1;
+            document.getElementById('next-btn').disabled = currentPage === totalPages;
+            
+            // 각 패널의 해당 페이지로 스크롤
+            const panels = ['pdf-panel', 'latex-panel', 'render-panel'];
+            panels.forEach(panelId => {
+                const sections = document.querySelectorAll(`#${panelId} [data-page="${currentPage}"]`);
+                if (sections.length > 0) {
+                    sections[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        }
+        
+        function previousPage() {
+            if (currentPage > 1) {
+                goToPage(currentPage - 1);
+            }
+        }
+        
+        function nextPage() {
+            if (currentPage < totalPages) {
+                goToPage(currentPage + 1);
+            }
+        }
+        
+        // 드래그 기능 초기화
+        function initDragFunctionality() {
+            console.log('✅ 드래그 기능 초기화');
+            const panelInners = document.querySelectorAll('.panel-inner');
+            
+            panelInners.forEach((inner, index) => {
+                inner.addEventListener('mousedown', startDrag);
+            });
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+        }
+        
+        function startDrag(e) {
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'IMG') return;
+            
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            currentPanel = e.currentTarget.closest('.panel');
+            if (currentPanel) {
+                const viewport = currentPanel.querySelector('.panel-viewport');
+                if (viewport) {
+                    panelStartScrollX = viewport.scrollLeft;
+                    panelStartScrollY = viewport.scrollTop;
+                }
+            }
+            
+            e.currentTarget.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+        
+        function drag(e) {
+            if (!isDragging || !currentPanel) return;
+            
+            const deltaX = dragStartX - e.clientX;
+            const deltaY = dragStartY - e.clientY;
+            
+            const viewport = currentPanel.querySelector('.panel-viewport');
+            if (viewport) {
+                viewport.scrollLeft = panelStartScrollX + deltaX;
+                viewport.scrollTop = panelStartScrollY + deltaY;
+            }
+        }
+        
+        function endDrag(e) {
+            if (isDragging) {
+                isDragging = false;
+                const allInners = document.querySelectorAll('.panel-inner');
+                allInners.forEach(inner => {
+                    inner.style.cursor = 'grab';
+                });
+                currentPanel = null;
+            }
+        }
+        
+        // 키보드 단축키
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 's' && e.ctrlKey) {
+                toggleSync();
+                e.preventDefault();
+            } else if (e.key === 'r' && e.ctrlKey) {
+                resetAllZoom();
+                e.preventDefault();
+            } else if (e.key === 'ArrowLeft') {
+                previousPage();
+            } else if (e.key === 'ArrowRight') {
+                nextPage();
+            }
+        });
+        
+        // 휠 줌 기능
+        document.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                const panel = e.target.closest('.panel');
+                if (panel) {
+                    const panelId = panel.id;
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    zoomPanel(panelId, delta);
+                }
+            }
+        }, { passive: false });
+        
+        // 페이지 로드 완료 후 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            initDragFunctionality();
+            console.log('✅ 3패널 뷰어 초기화 완료');
+            console.log('✅ 축소/확대: 각 패널의 +/- 버튼 또는 Ctrl+휠');
+            console.log('✅ 동기화: 상단 동기화 버튼 또는 Ctrl+S');
+            console.log('✅ 페이지 이동: 하단 버튼 또는 좌우 화살표 키');
+            console.log('✅ 내보내기: 상단 내보내기 버튼');
+            
+            // MathJax 렌더링
+            setTimeout(() => {
+                if (window.MathJax) {
+                    MathJax.typesetPromise().then(() => {
+                        console.log('✅ MathJax 렌더링 완료');
+                    }).catch((err) => {
+                        console.error('❌ MathJax 렌더링 오류:', err);
+                    });
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>
